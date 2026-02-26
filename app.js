@@ -6,6 +6,9 @@ const state = {
   edgeDrag: null,
 };
 
+const NODE_WIDTH = 120;
+const NODE_HEIGHT = 60;
+
 const ui = {
   canvas: document.getElementById('canvas'),
   edgeLayer: document.getElementById('edgeLayer'),
@@ -85,10 +88,11 @@ function renderNodes() {
 
     div.addEventListener('mousedown', (e) => {
       if (e.target.classList.contains('out')) return;
+      const rect = ui.canvas.getBoundingClientRect();
       state.dragNode = {
         id: node.id,
-        offsetX: e.clientX - node.x,
-        offsetY: e.clientY - node.y,
+        offsetX: e.clientX - rect.left - node.x,
+        offsetY: e.clientY - rect.top - node.y,
       };
     });
 
@@ -103,26 +107,12 @@ function renderNodes() {
       const rect = ui.canvas.getBoundingClientRect();
       state.edgeDrag = {
         fromNodeId: node.id,
-        x1: node.x + div.offsetWidth,
-        y1: node.y + div.offsetHeight / 2,
+        x1: node.x + NODE_WIDTH,
+        y1: node.y + NODE_HEIGHT / 2,
         x2: e.clientX - rect.left,
         y2: e.clientY - rect.top,
       };
       renderEdges();
-    });
-
-    div.addEventListener('mouseup', () => {
-      if (!state.edgeDrag) return;
-      if (state.edgeDrag.fromNodeId !== node.id) {
-        const exists = canvas.edges.some(
-          (edge) => edge.from === state.edgeDrag.fromNodeId && edge.to === node.id,
-        );
-        if (!exists) {
-          canvas.edges.push({ id: uid(), from: state.edgeDrag.fromNodeId, to: node.id });
-        }
-      }
-      state.edgeDrag = null;
-      render();
     });
 
     ui.canvas.appendChild(div);
@@ -132,6 +122,29 @@ function renderNodes() {
 function edgePath(x1, y1, x2, y2) {
   const dx = Math.max(40, Math.abs(x2 - x1) / 2);
   return `M ${x1},${y1} C ${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+}
+
+function commitEdgeIfPossible(clientX, clientY) {
+  const canvas = getActiveCanvas();
+  if (!canvas || !state.edgeDrag) return;
+
+  const dropTarget = document.elementFromPoint(clientX, clientY)?.closest('.node');
+  const toNodeId = dropTarget?.dataset.id;
+  if (!toNodeId || toNodeId === state.edgeDrag.fromNodeId) {
+    state.edgeDrag = null;
+    renderEdges();
+    return;
+  }
+
+  const exists = canvas.edges.some(
+    (edge) => edge.from === state.edgeDrag.fromNodeId && edge.to === toNodeId,
+  );
+  if (!exists) {
+    canvas.edges.push({ id: uid(), from: state.edgeDrag.fromNodeId, to: toNodeId });
+  }
+
+  state.edgeDrag = null;
+  render();
 }
 
 function renderEdges() {
@@ -145,7 +158,7 @@ function renderEdges() {
     const to = nodeById[edge.to];
     if (!from || !to) return;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', edgePath(from.x + 120, from.y + 30, to.x, to.y + 30));
+    path.setAttribute('d', edgePath(from.x + NODE_WIDTH, from.y + NODE_HEIGHT / 2, to.x, to.y + NODE_HEIGHT / 2));
     path.setAttribute('stroke', '#334155');
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke-width', '2');
@@ -197,10 +210,12 @@ window.addEventListener('mousemove', (e) => {
   }
 });
 
-window.addEventListener('mouseup', () => {
+window.addEventListener('mouseup', (e) => {
+  commitEdgeIfPossible(e.clientX, e.clientY);
   state.dragNode = null;
-  state.edgeDrag = null;
-  renderEdges();
+  if (!state.edgeDrag) {
+    renderEdges();
+  }
 });
 
 document.getElementById('newCanvasBtn').onclick = () => createCanvas();
