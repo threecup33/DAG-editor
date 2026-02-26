@@ -16,9 +16,6 @@ const ui = {
   nodeMetaInput: document.getElementById('nodeMetaInput'),
 };
 
-const NODE_WIDTH = 120;
-const NODE_HEIGHT = 60;
-
 const uid = () => Math.random().toString(36).slice(2, 10);
 const getActiveCanvas = () => state.canvases.find((c) => c.id === state.activeCanvasId);
 
@@ -88,11 +85,10 @@ function renderNodes() {
 
     div.addEventListener('mousedown', (e) => {
       if (e.target.classList.contains('out')) return;
-      const rect = ui.canvas.getBoundingClientRect();
       state.dragNode = {
         id: node.id,
-        offsetX: e.clientX - rect.left - node.x,
-        offsetY: e.clientY - rect.top - node.y,
+        offsetX: e.clientX - node.x,
+        offsetY: e.clientY - node.y,
       };
     });
 
@@ -107,12 +103,26 @@ function renderNodes() {
       const rect = ui.canvas.getBoundingClientRect();
       state.edgeDrag = {
         fromNodeId: node.id,
-        x1: node.x + NODE_WIDTH,
-        y1: node.y + NODE_HEIGHT / 2,
+        x1: node.x + div.offsetWidth,
+        y1: node.y + div.offsetHeight / 2,
         x2: e.clientX - rect.left,
         y2: e.clientY - rect.top,
       };
       renderEdges();
+    });
+
+    div.addEventListener('mouseup', () => {
+      if (!state.edgeDrag) return;
+      if (state.edgeDrag.fromNodeId !== node.id) {
+        const exists = canvas.edges.some(
+          (edge) => edge.from === state.edgeDrag.fromNodeId && edge.to === node.id,
+        );
+        if (!exists) {
+          canvas.edges.push({ id: uid(), from: state.edgeDrag.fromNodeId, to: node.id });
+        }
+      }
+      state.edgeDrag = null;
+      render();
     });
 
     ui.canvas.appendChild(div);
@@ -135,7 +145,7 @@ function renderEdges() {
     const to = nodeById[edge.to];
     if (!from || !to) return;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', edgePath(from.x + NODE_WIDTH, from.y + NODE_HEIGHT / 2, to.x, to.y + NODE_HEIGHT / 2));
+    path.setAttribute('d', edgePath(from.x + 120, from.y + 30, to.x, to.y + 30));
     path.setAttribute('stroke', '#334155');
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke-width', '2');
@@ -187,22 +197,7 @@ window.addEventListener('mousemove', (e) => {
   }
 });
 
-window.addEventListener('mouseup', (e) => {
-  const canvas = getActiveCanvas();
-
-  if (state.edgeDrag && canvas) {
-    const targetElement = e.target.closest('.node');
-    const targetNodeId = targetElement?.dataset?.id;
-    if (targetNodeId && targetNodeId !== state.edgeDrag.fromNodeId) {
-      const exists = canvas.edges.some(
-        (edge) => edge.from === state.edgeDrag.fromNodeId && edge.to === targetNodeId,
-      );
-      if (!exists) {
-        canvas.edges.push({ id: uid(), from: state.edgeDrag.fromNodeId, to: targetNodeId });
-      }
-    }
-  }
-
+window.addEventListener('mouseup', () => {
   state.dragNode = null;
   state.edgeDrag = null;
   renderEdges();
