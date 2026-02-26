@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DAG 编辑器</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <h1>DAG 编辑器</h1>
+        <button id="newCanvasBtn">新建画布</button>
+        <div id="canvasList" class="canvas-list"></div>
+        <hr />
+        <button id="addNodeBtn">新增节点</button>
+        <button id="exportBtn">导出 JSON</button>
+        <p class="tips">
+          使用方式：<br />
+          1) 点击“新增节点”创建节点；<br />
+          2) 拖动节点可移动位置；<br />
+          3) 从节点右侧圆点拖拽到另一个节点可创建边；<br />
+          4) 点击节点可编辑属性。
+        </p>
+      </aside>
+
+      <main class="main">
+        <svg id="edgeLayer" class="edge-layer"></svg>
+        <div id="canvas" class="canvas"></div>
+        <div id="propertyPanel" class="property-panel hidden">
+          <h3>节点属性</h3>
+          <label>
+            名称
+            <input id="nodeLabelInput" type="text" />
+          </label>
+          <label>
+            颜色
+            <input id="nodeColorInput" type="color" />
+          </label>
+          <label>
+            自定义属性 (JSON)
+            <textarea id="nodeMetaInput" rows="6"></textarea>
+          </label>
+          <button id="saveNodeBtn">保存节点</button>
+          <button id="deleteNodeBtn" class="danger">删除节点</button>
+        </div>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
