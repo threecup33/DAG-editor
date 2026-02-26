@@ -4,6 +4,7 @@ const state = {
   selectedNodeId: null,
   dragNode: null,
   edgeDrag: null,
+  canvasSeq: 1,
 };
 
 const NODE_WIDTH = 120;
@@ -14,16 +15,24 @@ const ui = {
   edgeLayer: document.getElementById('edgeLayer'),
   canvasList: document.getElementById('canvasList'),
   propertyPanel: document.getElementById('propertyPanel'),
+  nodeIdInput: document.getElementById('nodeIdInput'),
   nodeLabelInput: document.getElementById('nodeLabelInput'),
   nodeColorInput: document.getElementById('nodeColorInput'),
   nodeMetaInput: document.getElementById('nodeMetaInput'),
 };
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+const nextCanvasId = () => `canvas-${state.canvasSeq++}`;
 const getActiveCanvas = () => state.canvases.find((c) => c.id === state.activeCanvasId);
 
+function nextNodeId(canvas) {
+  const used = new Set(canvas.nodes.map((n) => Number(n.id)).filter((id) => Number.isInteger(id) && id > 0));
+  let candidate = 1;
+  while (used.has(candidate)) candidate += 1;
+  return String(candidate);
+}
+
 function createCanvas(name = `画布 ${state.canvases.length + 1}`) {
-  const canvas = { id: uid(), name, nodes: [], edges: [] };
+  const canvas = { id: nextCanvasId(), name, nodes: [], edges: [] };
   state.canvases.push(canvas);
   state.activeCanvasId = canvas.id;
   state.selectedNodeId = null;
@@ -33,9 +42,10 @@ function createCanvas(name = `画布 ${state.canvases.length + 1}`) {
 function addNode() {
   const canvas = getActiveCanvas();
   if (!canvas) return;
+  const id = nextNodeId(canvas);
   canvas.nodes.push({
-    id: uid(),
-    label: `节点 ${canvas.nodes.length + 1}`,
+    id,
+    label: `节点 ${id}`,
     x: 200 + canvas.nodes.length * 30,
     y: 120 + canvas.nodes.length * 20,
     color: '#ffffff',
@@ -82,7 +92,7 @@ function renderNodes() {
     div.innerHTML = `
       <div class="handle in"></div>
       <div class="title">${node.label}</div>
-      <small>${node.id}</small>
+      <small>ID: ${node.id}</small>
       <div class="handle out"></div>
     `;
 
@@ -140,7 +150,7 @@ function commitEdgeIfPossible(clientX, clientY) {
     (edge) => edge.from === state.edgeDrag.fromNodeId && edge.to === toNodeId,
   );
   if (!exists) {
-    canvas.edges.push({ id: uid(), from: state.edgeDrag.fromNodeId, to: toNodeId });
+    canvas.edges.push({ id: `${state.edgeDrag.fromNodeId}->${toNodeId}`, from: state.edgeDrag.fromNodeId, to: toNodeId });
   }
 
   state.edgeDrag = null;
@@ -184,6 +194,7 @@ function renderPropertyPanel() {
     return;
   }
   ui.propertyPanel.classList.remove('hidden');
+  ui.nodeIdInput.value = node.id;
   ui.nodeLabelInput.value = node.label;
   ui.nodeColorInput.value = node.color;
   ui.nodeMetaInput.value = JSON.stringify(node.meta, null, 2);
@@ -225,10 +236,35 @@ document.getElementById('saveNodeBtn').onclick = () => {
   const canvas = getActiveCanvas();
   const node = canvas?.nodes.find((n) => n.id === state.selectedNodeId);
   if (!node) return;
+
+  const nextId = ui.nodeIdInput.value.trim();
+  if (!nextId) {
+    alert('节点 ID 不能为空');
+    return;
+  }
+
+  const duplicated = canvas.nodes.some((n) => n.id === nextId && n !== node);
+  if (duplicated) {
+    alert('节点 ID 已存在，请使用唯一 ID');
+    return;
+  }
+
   try {
+    const oldId = node.id;
+    node.id = nextId;
     node.label = ui.nodeLabelInput.value.trim() || node.label;
     node.color = ui.nodeColorInput.value;
     node.meta = JSON.parse(ui.nodeMetaInput.value || '{}');
+
+    if (oldId !== nextId) {
+      canvas.edges.forEach((edge) => {
+        if (edge.from === oldId) edge.from = nextId;
+        if (edge.to === oldId) edge.to = nextId;
+        edge.id = `${edge.from}->${edge.to}`;
+      });
+      state.selectedNodeId = nextId;
+    }
+
     render();
   } catch {
     alert('自定义属性必须是合法 JSON');
