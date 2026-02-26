@@ -5,6 +5,7 @@ const state = {
   dragNode: null,
   edgeDrag: null,
   canvasSeq: 1,
+  lastMetaKeysTemplate: [],
 };
 
 const NODE_WIDTH = 120;
@@ -18,7 +19,9 @@ const ui = {
   nodeIdInput: document.getElementById('nodeIdInput'),
   nodeLabelInput: document.getElementById('nodeLabelInput'),
   nodeColorInput: document.getElementById('nodeColorInput'),
-  nodeMetaInput: document.getElementById('nodeMetaInput'),
+  metaRows: document.getElementById('metaRows'),
+  addMetaRowBtn: document.getElementById('addMetaRowBtn'),
+  importInput: document.getElementById('importInput'),
 };
 
 const nextCanvasId = () => `canvas-${state.canvasSeq++}`;
@@ -39,6 +42,10 @@ function createCanvas(name = `画布 ${state.canvases.length + 1}`) {
   render();
 }
 
+function createMetaFromTemplate() {
+  return Object.fromEntries(state.lastMetaKeysTemplate.map((key) => [key, '']));
+}
+
 function addNode() {
   const canvas = getActiveCanvas();
   if (!canvas) return;
@@ -49,7 +56,7 @@ function addNode() {
     x: 200 + canvas.nodes.length * 30,
     y: 120 + canvas.nodes.length * 20,
     color: '#ffffff',
-    meta: {},
+    meta: createMetaFromTemplate(),
   });
   render();
 }
@@ -134,6 +141,27 @@ function edgePath(x1, y1, x2, y2) {
   return `M ${x1},${y1} C ${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
 }
 
+function ensureArrowMarker() {
+  if (ui.edgeLayer.querySelector('#arrow-head')) return;
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  marker.setAttribute('id', 'arrow-head');
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '8');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '8');
+  marker.setAttribute('orient', 'auto-start-reverse');
+
+  const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  arrow.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+  arrow.setAttribute('fill', '#334155');
+
+  marker.appendChild(arrow);
+  defs.appendChild(marker);
+  ui.edgeLayer.appendChild(defs);
+}
+
 function commitEdgeIfPossible(clientX, clientY) {
   const canvas = getActiveCanvas();
   if (!canvas || !state.edgeDrag) return;
@@ -161,6 +189,7 @@ function renderEdges() {
   const canvas = getActiveCanvas();
   ui.edgeLayer.innerHTML = '';
   if (!canvas) return;
+  ensureArrowMarker();
 
   const nodeById = Object.fromEntries(canvas.nodes.map((n) => [n.id, n]));
   canvas.edges.forEach((edge) => {
@@ -172,6 +201,7 @@ function renderEdges() {
     path.setAttribute('stroke', '#334155');
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke-width', '2');
+    path.setAttribute('marker-end', 'url(#arrow-head)');
     ui.edgeLayer.appendChild(path);
   });
 
@@ -182,8 +212,56 @@ function renderEdges() {
     draft.setAttribute('fill', 'none');
     draft.setAttribute('stroke-width', '2');
     draft.setAttribute('stroke-dasharray', '6 4');
+    draft.setAttribute('marker-end', 'url(#arrow-head)');
     ui.edgeLayer.appendChild(draft);
   }
+}
+
+function addMetaRow(key = '', value = '') {
+  const row = document.createElement('div');
+  row.className = 'meta-row';
+
+  const keyInput = document.createElement('input');
+  keyInput.type = 'text';
+  keyInput.placeholder = '属性名';
+  keyInput.value = key;
+
+  const valueInput = document.createElement('input');
+  valueInput.type = 'text';
+  valueInput.placeholder = '属性值';
+  valueInput.value = value;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.textContent = '✕';
+  removeBtn.onclick = () => row.remove();
+
+  row.appendChild(keyInput);
+  row.appendChild(valueInput);
+  row.appendChild(removeBtn);
+  ui.metaRows.appendChild(row);
+}
+
+function setMetaRows(meta) {
+  ui.metaRows.innerHTML = '';
+  const entries = Object.entries(meta || {});
+  if (!entries.length) {
+    addMetaRow();
+    return;
+  }
+  entries.forEach(([key, value]) => addMetaRow(String(key), String(value)));
+}
+
+function getMetaFromRows() {
+  const meta = {};
+  const rows = ui.metaRows.querySelectorAll('.meta-row');
+  rows.forEach((row) => {
+    const [keyInput, valueInput] = row.querySelectorAll('input');
+    const key = keyInput.value.trim();
+    if (!key) return;
+    meta[key] = valueInput.value;
+  });
+  return meta;
 }
 
 function renderPropertyPanel() {
@@ -197,7 +275,35 @@ function renderPropertyPanel() {
   ui.nodeIdInput.value = node.id;
   ui.nodeLabelInput.value = node.label;
   ui.nodeColorInput.value = node.color;
-  ui.nodeMetaInput.value = JSON.stringify(node.meta, null, 2);
+  setMetaRows(node.meta);
+}
+
+function normalizeImportedCanvas(raw) {
+  const nodes = Array.isArray(raw.nodes) ? raw.nodes : [];
+  const edges = Array.isArray(raw.edges) ? raw.edges : [];
+
+  const normalizedNodes = nodes.map((node, index) => ({
+    id: String(node.id ?? index + 1),
+    label: String(node.label ?? `节点 ${index + 1}`),
+    x: Number.isFinite(node.x) ? node.x : 120 + index * 20,
+    y: Number.isFinite(node.y) ? node.y : 100 + index * 20,
+    color: typeof node.color === 'string' ? node.color : '#ffffff',
+    meta: typeof node.meta === 'object' && node.meta !== null ? node.meta : {},
+  }));
+
+  const nodeIdSet = new Set(normalizedNodes.map((node) => node.id));
+  const normalizedEdges = edges
+    .map((edge) => ({ from: String(edge.from), to: String(edge.to) }))
+    .filter((edge) => edge.from && edge.to && edge.from !== edge.to)
+    .filter((edge) => nodeIdSet.has(edge.from) && nodeIdSet.has(edge.to))
+    .map((edge) => ({ ...edge, id: `${edge.from}->${edge.to}` }));
+
+  return {
+    id: nextCanvasId(),
+    name: String(raw.name || `导入画布 ${state.canvases.length + 1}`),
+    nodes: normalizedNodes,
+    edges: normalizedEdges,
+  };
 }
 
 window.addEventListener('mousemove', (e) => {
@@ -231,6 +337,7 @@ window.addEventListener('mouseup', (e) => {
 
 document.getElementById('newCanvasBtn').onclick = () => createCanvas();
 document.getElementById('addNodeBtn').onclick = addNode;
+ui.addMetaRowBtn.onclick = () => addMetaRow();
 
 document.getElementById('saveNodeBtn').onclick = () => {
   const canvas = getActiveCanvas();
@@ -249,26 +356,23 @@ document.getElementById('saveNodeBtn').onclick = () => {
     return;
   }
 
-  try {
-    const oldId = node.id;
-    node.id = nextId;
-    node.label = ui.nodeLabelInput.value.trim() || node.label;
-    node.color = ui.nodeColorInput.value;
-    node.meta = JSON.parse(ui.nodeMetaInput.value || '{}');
+  const oldId = node.id;
+  node.id = nextId;
+  node.label = ui.nodeLabelInput.value.trim() || node.label;
+  node.color = ui.nodeColorInput.value;
+  node.meta = getMetaFromRows();
+  state.lastMetaKeysTemplate = Object.keys(node.meta);
 
-    if (oldId !== nextId) {
-      canvas.edges.forEach((edge) => {
-        if (edge.from === oldId) edge.from = nextId;
-        if (edge.to === oldId) edge.to = nextId;
-        edge.id = `${edge.from}->${edge.to}`;
-      });
-      state.selectedNodeId = nextId;
-    }
-
-    render();
-  } catch {
-    alert('自定义属性必须是合法 JSON');
+  if (oldId !== nextId) {
+    canvas.edges.forEach((edge) => {
+      if (edge.from === oldId) edge.from = nextId;
+      if (edge.to === oldId) edge.to = nextId;
+      edge.id = `${edge.from}->${edge.to}`;
+    });
+    state.selectedNodeId = nextId;
   }
+
+  render();
 };
 
 document.getElementById('deleteNodeBtn').onclick = () => {
@@ -296,6 +400,25 @@ document.getElementById('exportBtn').onclick = () => {
   a.download = `${canvas.name}.json`;
   a.click();
   URL.revokeObjectURL(url);
+};
+
+document.getElementById('importBtn').onclick = () => ui.importInput.click();
+ui.importInput.onchange = async (event) => {
+  const [file] = event.target.files || [];
+  event.target.value = '';
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    const imported = normalizeImportedCanvas(raw);
+    state.canvases.push(imported);
+    state.activeCanvasId = imported.id;
+    state.selectedNodeId = null;
+    render();
+  } catch {
+    alert('导入失败：请检查 JSON 格式是否正确');
+  }
 };
 
 createCanvas('默认画布');
