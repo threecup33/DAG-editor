@@ -22,13 +22,16 @@
           1) 点击“新增节点”创建节点；<br />
           2) 拖动节点可移动位置；<br />
           3) 从节点右侧圆点拖拽到另一个节点可创建边；<br />
-          4) 点击节点可编辑属性。
+          4) 拖动画布空白区域可平移视图；<br />
+          5) 点击节点可编辑属性。
         </p>
       </aside>
 
       <main class="main">
-        <svg id="edgeLayer" class="edge-layer"></svg>
-        <div id="canvas" class="canvas"></div>
+        <div id="viewport" class="viewport">
+          <svg id="edgeLayer" class="edge-layer"></svg>
+          <div id="canvas" class="canvas"></div>
+        </div>
         <div id="propertyPanel" class="property-panel hidden">
           <h3>节点属性</h3>
           <label>
