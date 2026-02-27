@@ -4,6 +4,7 @@ const state = {
   selectedNodeId: null,
   dragNode: null,
   edgeDrag: null,
+  dragCanvas: null,
   canvasSeq: 1,
   lastMetaKeysTemplate: [],
 };
@@ -13,6 +14,8 @@ const NODE_HEIGHT = 60;
 
 const ui = {
   canvas: document.getElementById('canvas'),
+  main: document.querySelector('.main'),
+  viewport: document.getElementById('viewport'),
   edgeLayer: document.getElementById('edgeLayer'),
   canvasList: document.getElementById('canvasList'),
   propertyPanel: document.getElementById('propertyPanel'),
@@ -27,6 +30,25 @@ const ui = {
 const nextCanvasId = () => `canvas-${state.canvasSeq++}`;
 const getActiveCanvas = () => state.canvases.find((c) => c.id === state.activeCanvasId);
 
+
+function getPointerOnCanvas(clientX, clientY) {
+  const canvas = getActiveCanvas();
+  const rect = ui.main.getBoundingClientRect();
+  const panX = canvas?.panX ?? 0;
+  const panY = canvas?.panY ?? 0;
+  return {
+    x: clientX - rect.left - panX,
+    y: clientY - rect.top - panY,
+  };
+}
+
+function updateViewportPosition() {
+  const canvas = getActiveCanvas();
+  const panX = canvas?.panX ?? 0;
+  const panY = canvas?.panY ?? 0;
+  ui.viewport.style.transform = `translate(${panX}px, ${panY}px)`;
+}
+
 function nextNodeId(canvas) {
   const used = new Set(canvas.nodes.map((n) => Number(n.id)).filter((id) => Number.isInteger(id) && id > 0));
   let candidate = 1;
@@ -35,7 +57,7 @@ function nextNodeId(canvas) {
 }
 
 function createCanvas(name = `画布 ${state.canvases.length + 1}`) {
-  const canvas = { id: nextCanvasId(), name, nodes: [], edges: [] };
+  const canvas = { id: nextCanvasId(), name, nodes: [], edges: [], panX: 0, panY: 0 };
   state.canvases.push(canvas);
   state.activeCanvasId = canvas.id;
   state.selectedNodeId = null;
@@ -62,6 +84,7 @@ function addNode() {
 }
 
 function render() {
+  updateViewportPosition();
   renderCanvasList();
   renderNodes();
   renderEdges();
@@ -105,11 +128,11 @@ function renderNodes() {
 
     div.addEventListener('mousedown', (e) => {
       if (e.target.classList.contains('out')) return;
-      const rect = ui.canvas.getBoundingClientRect();
+      const pointer = getPointerOnCanvas(e.clientX, e.clientY);
       state.dragNode = {
         id: node.id,
-        offsetX: e.clientX - rect.left - node.x,
-        offsetY: e.clientY - rect.top - node.y,
+        offsetX: pointer.x - node.x,
+        offsetY: pointer.y - node.y,
       };
     });
 
@@ -121,13 +144,13 @@ function renderNodes() {
     const outHandle = div.querySelector('.out');
     outHandle.addEventListener('mousedown', (e) => {
       e.stopPropagation();
-      const rect = ui.canvas.getBoundingClientRect();
+      const pointer = getPointerOnCanvas(e.clientX, e.clientY);
       state.edgeDrag = {
         fromNodeId: node.id,
         x1: node.x + NODE_WIDTH,
         y1: node.y + NODE_HEIGHT / 2,
-        x2: e.clientX - rect.left,
-        y2: e.clientY - rect.top,
+        x2: pointer.x,
+        y2: pointer.y,
       };
       renderEdges();
     });
@@ -303,26 +326,34 @@ function normalizeImportedCanvas(raw) {
     name: String(raw.name || `导入画布 ${state.canvases.length + 1}`),
     nodes: normalizedNodes,
     edges: normalizedEdges,
+    panX: Number.isFinite(raw.panX) ? raw.panX : 0,
+    panY: Number.isFinite(raw.panY) ? raw.panY : 0,
   };
 }
 
 window.addEventListener('mousemove', (e) => {
   const canvas = getActiveCanvas();
   if (!canvas) return;
-  const rect = ui.canvas.getBoundingClientRect();
+  const pointer = getPointerOnCanvas(e.clientX, e.clientY);
+
+  if (state.dragCanvas) {
+    canvas.panX = state.dragCanvas.startPanX + (e.clientX - state.dragCanvas.startX);
+    canvas.panY = state.dragCanvas.startPanY + (e.clientY - state.dragCanvas.startY);
+    updateViewportPosition();
+  }
 
   if (state.dragNode) {
     const node = canvas.nodes.find((n) => n.id === state.dragNode.id);
     if (!node) return;
-    node.x = e.clientX - rect.left - state.dragNode.offsetX;
-    node.y = e.clientY - rect.top - state.dragNode.offsetY;
+    node.x = pointer.x - state.dragNode.offsetX;
+    node.y = pointer.y - state.dragNode.offsetY;
     renderNodes();
     renderEdges();
   }
 
   if (state.edgeDrag) {
-    state.edgeDrag.x2 = e.clientX - rect.left;
-    state.edgeDrag.y2 = e.clientY - rect.top;
+    state.edgeDrag.x2 = pointer.x;
+    state.edgeDrag.y2 = pointer.y;
     renderEdges();
   }
 });
@@ -330,9 +361,24 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', (e) => {
   commitEdgeIfPossible(e.clientX, e.clientY);
   state.dragNode = null;
+  state.dragCanvas = null;
   if (!state.edgeDrag) {
     renderEdges();
   }
+});
+
+
+ui.main.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest('.node') || e.target.closest('.property-panel')) return;
+  const canvas = getActiveCanvas();
+  if (!canvas) return;
+  state.dragCanvas = {
+    startX: e.clientX,
+    startY: e.clientY,
+    startPanX: canvas.panX ?? 0,
+    startPanY: canvas.panY ?? 0,
+  };
 });
 
 document.getElementById('newCanvasBtn').onclick = () => createCanvas();
@@ -392,6 +438,8 @@ document.getElementById('exportBtn').onclick = () => {
     name: canvas.name,
     nodes: canvas.nodes,
     edges: canvas.edges,
+    panX: canvas.panX ?? 0,
+    panY: canvas.panY ?? 0,
   }, null, 2);
   const blob = new Blob([payload], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
