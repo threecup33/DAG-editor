@@ -170,6 +170,39 @@ function edgePath(x1, y1, x2, y2) {
   return `M ${x1},${y1} C ${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
 }
 
+function distanceSquared(x1, y1, x2, y2) {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  return dx * dx + dy * dy;
+}
+
+function findEdgeNearPoint(pointerX, pointerY, tolerance = 8) {
+  const canvas = getActiveCanvas();
+  if (!canvas) return null;
+  const nodeById = Object.fromEntries(canvas.nodes.map((node) => [node.id, node]));
+  const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const toleranceSquared = tolerance * tolerance;
+
+  for (const edge of canvas.edges) {
+    const from = nodeById[edge.from];
+    const to = nodeById[edge.to];
+    if (!from || !to) continue;
+
+    tempPath.setAttribute('d', edgePath(from.x + NODE_WIDTH, from.y + NODE_HEIGHT / 2, to.x, to.y + NODE_HEIGHT / 2));
+    const totalLength = tempPath.getTotalLength();
+    const steps = Math.max(10, Math.ceil(totalLength / 8));
+
+    for (let i = 0; i <= steps; i += 1) {
+      const point = tempPath.getPointAtLength((i / steps) * totalLength);
+      if (distanceSquared(pointerX, pointerY, point.x, point.y) <= toleranceSquared) {
+        return edge;
+      }
+    }
+  }
+
+  return null;
+}
+
 function ensureArrowMarker() {
   if (ui.edgeLayer.querySelector('#arrow-head')) return;
   const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -390,7 +423,16 @@ window.addEventListener('mouseup', (e) => {
 
 ui.main.addEventListener('click', (e) => {
   if (e.target.closest('.node') || e.target.closest('.property-panel')) return;
-  if (e.target.closest('path')) return;
+
+  const pointer = getPointerOnCanvas(e.clientX, e.clientY);
+  const targetEdge = findEdgeNearPoint(pointer.x, pointer.y);
+  if (targetEdge) {
+    state.selectedEdgeId = targetEdge.id;
+    state.selectedNodeId = null;
+    render();
+    return;
+  }
+
   if (state.selectedNodeId || state.selectedEdgeId) {
     state.selectedNodeId = null;
     state.selectedEdgeId = null;
