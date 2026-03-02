@@ -14,6 +14,11 @@
         <div id="canvasList" class="canvas-list"></div>
         <hr />
         <button id="addNodeBtn">新增节点</button>
+        <div class="search-box">
+          <input id="nodeSearchInput" type="text" placeholder="搜索节点ID/名称/属性" />
+          <button id="searchNodeBtn" class="secondary">定位节点</button>
+        </div>
+        <button id="deleteEdgeBtn" class="danger" disabled>删除选中边</button>
         <button id="exportBtn">导出 JSON</button>
         <button id="importBtn">导入 JSON</button>
         <input id="importInput" type="file" accept="application/json" class="hidden-file" />
@@ -22,8 +27,10 @@
           1) 点击“新增节点”创建节点；<br />
           2) 拖动节点可移动位置；<br />
           3) 从节点右侧圆点拖拽到另一个节点可创建边；<br />
-          4) 拖动画布空白区域可平移视图；<br />
-          5) 点击节点可编辑属性。
+          4) 点击边可高亮并删除；<br />
+          5) 可通过搜索框快速定位节点；<br />
+          6) 拖动画布空白区域可平移视图；<br />
+          7) 点击节点可编辑属性。
         </p>
       </aside>
 

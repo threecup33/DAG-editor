@@ -2,6 +2,7 @@ const state = {
   canvases: [],
   activeCanvasId: null,
   selectedNodeId: null,
+  selectedEdgeId: null,
   dragNode: null,
   edgeDrag: null,
   dragCanvas: null,
@@ -25,6 +26,8 @@ const ui = {
   metaRows: document.getElementById('metaRows'),
   addMetaRowBtn: document.getElementById('addMetaRowBtn'),
   importInput: document.getElementById('importInput'),
+  deleteEdgeBtn: document.getElementById('deleteEdgeBtn'),
+  nodeSearchInput: document.getElementById('nodeSearchInput'),
 };
 
 const nextCanvasId = () => `canvas-${state.canvasSeq++}`;
@@ -61,6 +64,7 @@ function createCanvas(name = `画布 ${state.canvases.length + 1}`) {
   state.canvases.push(canvas);
   state.activeCanvasId = canvas.id;
   state.selectedNodeId = null;
+  state.selectedEdgeId = null;
   render();
 }
 
@@ -100,6 +104,7 @@ function renderCanvasList() {
     div.onclick = () => {
       state.activeCanvasId = canvas.id;
       state.selectedNodeId = null;
+      state.selectedEdgeId = null;
       render();
     };
     ui.canvasList.appendChild(div);
@@ -138,6 +143,7 @@ function renderNodes() {
 
     div.addEventListener('click', () => {
       state.selectedNodeId = node.id;
+      state.selectedEdgeId = null;
       render();
     });
 
@@ -211,6 +217,7 @@ function commitEdgeIfPossible(clientX, clientY) {
 function renderEdges() {
   const canvas = getActiveCanvas();
   ui.edgeLayer.innerHTML = '';
+  ui.deleteEdgeBtn.disabled = !state.selectedEdgeId;
   if (!canvas) return;
   ensureArrowMarker();
 
@@ -222,11 +229,25 @@ function renderEdges() {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', edgePath(from.x + NODE_WIDTH, from.y + NODE_HEIGHT / 2, to.x, to.y + NODE_HEIGHT / 2));
     path.setAttribute('stroke', '#334155');
+    if (edge.id === state.selectedEdgeId) {
+      path.setAttribute('stroke', '#f43f5e');
+      path.setAttribute('stroke-width', '4');
+    }
     path.setAttribute('fill', 'none');
-    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke-width', path.getAttribute('stroke-width') || '2');
     path.setAttribute('marker-end', 'url(#arrow-head)');
+    path.style.pointerEvents = 'stroke';
+    path.style.cursor = 'pointer';
+    path.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.selectedEdgeId = edge.id;
+      state.selectedNodeId = null;
+      render();
+    });
     ui.edgeLayer.appendChild(path);
   });
+
+  ui.deleteEdgeBtn.disabled = !state.selectedEdgeId;
 
   if (state.edgeDrag) {
     const draft = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -367,6 +388,16 @@ window.addEventListener('mouseup', (e) => {
   }
 });
 
+ui.main.addEventListener('click', (e) => {
+  if (e.target.closest('.node') || e.target.closest('.property-panel')) return;
+  if (e.target.closest('path')) return;
+  if (state.selectedNodeId || state.selectedEdgeId) {
+    state.selectedNodeId = null;
+    state.selectedEdgeId = null;
+    render();
+  }
+});
+
 
 ui.main.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
@@ -384,6 +415,45 @@ ui.main.addEventListener('mousedown', (e) => {
 document.getElementById('newCanvasBtn').onclick = () => createCanvas();
 document.getElementById('addNodeBtn').onclick = addNode;
 ui.addMetaRowBtn.onclick = () => addMetaRow();
+
+function deleteSelectedEdge() {
+  const canvas = getActiveCanvas();
+  if (!canvas || !state.selectedEdgeId) return;
+  canvas.edges = canvas.edges.filter((edge) => edge.id !== state.selectedEdgeId);
+  state.selectedEdgeId = null;
+  render();
+}
+
+function searchNodeAndFocus() {
+  const canvas = getActiveCanvas();
+  if (!canvas) return;
+  const keyword = ui.nodeSearchInput.value.trim().toLowerCase();
+  if (!keyword) return;
+
+  const targetNode = canvas.nodes.find((node) => {
+    const metaEntries = Object.entries(node.meta || {}).flatMap(([key, value]) => [key, String(value)]);
+    const haystack = [node.id, node.label, ...metaEntries].join(' ').toLowerCase();
+    return haystack.includes(keyword);
+  });
+
+  if (!targetNode) {
+    alert('未找到匹配节点');
+    return;
+  }
+
+  const rect = ui.main.getBoundingClientRect();
+  canvas.panX = rect.width / 2 - (targetNode.x + NODE_WIDTH / 2);
+  canvas.panY = rect.height / 2 - (targetNode.y + NODE_HEIGHT / 2);
+  state.selectedNodeId = targetNode.id;
+  state.selectedEdgeId = null;
+  render();
+}
+
+ui.deleteEdgeBtn.onclick = deleteSelectedEdge;
+document.getElementById('searchNodeBtn').onclick = searchNodeAndFocus;
+ui.nodeSearchInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') searchNodeAndFocus();
+});
 
 document.getElementById('saveNodeBtn').onclick = () => {
   const canvas = getActiveCanvas();
@@ -427,8 +497,15 @@ document.getElementById('deleteNodeBtn').onclick = () => {
   canvas.nodes = canvas.nodes.filter((n) => n.id !== state.selectedNodeId);
   canvas.edges = canvas.edges.filter((e) => e.from !== state.selectedNodeId && e.to !== state.selectedNodeId);
   state.selectedNodeId = null;
+  state.selectedEdgeId = null;
   render();
 };
+
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+  if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  deleteSelectedEdge();
+});
 
 document.getElementById('exportBtn').onclick = () => {
   const canvas = getActiveCanvas();
@@ -463,6 +540,7 @@ ui.importInput.onchange = async (event) => {
     state.canvases.push(imported);
     state.activeCanvasId = imported.id;
     state.selectedNodeId = null;
+    state.selectedEdgeId = null;
     render();
   } catch {
     alert('导入失败：请检查 JSON 格式是否正确');
