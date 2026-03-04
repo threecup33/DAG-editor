@@ -27,7 +27,8 @@ button.secondary { background: #475569; }
 .property-panel { position: absolute; right: 16px; top: 16px; width: 280px; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); z-index: 5; }
 .property-panel.hidden { display: none; }
 .property-panel label { display: block; margin-bottom: 10px; font-size: 14px; }
-.property-panel input, .property-panel textarea { width: 100%; margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; font: inherit; }
+.property-panel input, .property-panel textarea, .property-panel select { width: 100%; margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; font: inherit; }
+.property-panel input[readonly] { background: #f1f5f9; color: #64748b; cursor: default; }
 .meta-rows { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; max-height: 180px; overflow-y: auto; }
 .meta-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; }
 .meta-row input { margin-top: 0; }
