@@ -28,6 +28,10 @@ const ui = {
   importInput: document.getElementById('importInput'),
   deleteEdgeBtn: document.getElementById('deleteEdgeBtn'),
   nodeSearchInput: document.getElementById('nodeSearchInput'),
+  edgePropertyPanel: document.getElementById('edgePropertyPanel'),
+  edgeIdDisplay: document.getElementById('edgeIdDisplay'),
+  edgeFromSelect: document.getElementById('edgeFromSelect'),
+  edgeToSelect: document.getElementById('edgeToSelect'),
 };
 
 const nextCanvasId = () => `canvas-${state.canvasSeq++}`;
@@ -93,6 +97,7 @@ function render() {
   renderNodes();
   renderEdges();
   renderPropertyPanel();
+  renderEdgePropertyPanel();
 }
 
 function renderCanvasList() {
@@ -341,6 +346,30 @@ function getMetaFromRows() {
   return meta;
 }
 
+function renderEdgePropertyPanel() {
+  const canvas = getActiveCanvas();
+  const edge = canvas?.edges.find((e) => e.id === state.selectedEdgeId);
+  if (!edge) {
+    ui.edgePropertyPanel.classList.add('hidden');
+    return;
+  }
+  ui.edgePropertyPanel.classList.remove('hidden');
+  ui.edgeIdDisplay.value = edge.id;
+
+  const buildOptions = (selectEl, selectedId) => {
+    selectEl.innerHTML = '';
+    canvas.nodes.forEach((node) => {
+      const option = document.createElement('option');
+      option.value = node.id;
+      option.textContent = `${node.label} (ID: ${node.id})`;
+      if (node.id === selectedId) option.selected = true;
+      selectEl.appendChild(option);
+    });
+  };
+  buildOptions(ui.edgeFromSelect, edge.from);
+  buildOptions(ui.edgeToSelect, edge.to);
+}
+
 function renderPropertyPanel() {
   const canvas = getActiveCanvas();
   const node = canvas?.nodes.find((n) => n.id === state.selectedNodeId);
@@ -492,6 +521,35 @@ function searchNodeAndFocus() {
 }
 
 ui.deleteEdgeBtn.onclick = deleteSelectedEdge;
+document.getElementById('deleteEdgePanelBtn').onclick = deleteSelectedEdge;
+
+document.getElementById('saveEdgeBtn').onclick = () => {
+  const canvas = getActiveCanvas();
+  const edge = canvas?.edges.find((e) => e.id === state.selectedEdgeId);
+  if (!edge) return;
+
+  const newFrom = ui.edgeFromSelect.value;
+  const newTo = ui.edgeToSelect.value;
+  if (newFrom === newTo) {
+    alert('起点和终点不能是同一个节点');
+    return;
+  }
+
+  const newId = `${newFrom}->${newTo}`;
+  if (newId !== edge.id) {
+    const duplicate = canvas.edges.some((e) => e.id === newId);
+    if (duplicate) {
+      alert('该方向的边已存在');
+      return;
+    }
+    edge.from = newFrom;
+    edge.to = newTo;
+    edge.id = newId;
+    state.selectedEdgeId = newId;
+  }
+  render();
+};
+
 document.getElementById('searchNodeBtn').onclick = searchNodeAndFocus;
 ui.nodeSearchInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') searchNodeAndFocus();
